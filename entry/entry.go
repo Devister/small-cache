@@ -1,5 +1,11 @@
 package entry
 
+import "unsafe"
+
+const (
+	entryHeaderSize = uint16(unsafe.Sizeof(EntryHeader{}))
+)
+
 // caller should check if KeyLen + ValueLen <= Cap;
 type EntryHeader struct {
 	Size     uint16
