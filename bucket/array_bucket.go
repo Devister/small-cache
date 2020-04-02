@@ -19,8 +19,6 @@ type ArrayBucket struct {
 
 func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) {
 	e, idx := b.getEntry(hkey, key)
-	b.Lock()
-	defer b.Unlock()
 	if e != nil {
 		// entry exist
 		if e.Cap() >= len(key)+len(value) {
