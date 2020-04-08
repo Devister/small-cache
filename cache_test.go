@@ -2,35 +2,34 @@ package small_cache
 
 import (
 	"bytes"
-	"fmt"
-	"math/rand"
 	"testing"
-	"time"
 )
 
-var message = blob('a', 256)
+func TestCacheSetAndGet(t *testing.T) {
+	c := NewCache(&CacheConfig{})
+	key := []byte("key1")
+	value1 := []byte("value1")
+	value2 := []byte("value2")
 
-func BenchmarkWriteOnCache(b *testing.B) {
-	writeOnCache(b)
-}
-
-func writeOnCache(b *testing.B) {
-	cfg := &CacheConfig{}
-	cache := NewCache(cfg)
-	rand.Seed(time.Now().Unix())
-
-	b.RunParallel(func(pb *testing.PB) {
-		id := rand.Int()
-		counter := 0
-
-		b.ReportAllocs()
-		for pb.Next() {
-			cache.Set([]byte(fmt.Sprintf("key-%d-%d", id, counter)), message)
-			counter = counter + 1
+	if err := c.Set(key, value1); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := c.Get(key); err != nil {
+		t.Fatal(err)
+	} else {
+		if !bytes.Equal(v, value1) {
+			t.Fatal("value not expect")
 		}
-	})
-}
+	}
 
-func blob(char byte, len int) []byte {
-	return bytes.Repeat([]byte{char}, len)
+	if err := c.Set(key, value2); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := c.Get(key); err != nil {
+		t.Fatal(err)
+	} else {
+		if !bytes.Equal(v, value2) {
+			t.Fatal("value not expect")
+		}
+	}
 }

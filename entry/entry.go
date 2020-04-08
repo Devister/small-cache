@@ -1,9 +1,16 @@
 package entry
 
-import "unsafe"
+import (
+	"errors"
+	"unsafe"
+)
 
 const (
-	entryHeaderSize = uint16(unsafe.Sizeof(EntryHeader{}))
+	entryHeaderSize = unsafe.Sizeof(EntryHeader{})
+)
+
+var (
+	sizeLargeError = errors.New("size is large than capacity")
 )
 
 // caller should check if KeyLen + ValueLen <= Cap;
@@ -23,7 +30,7 @@ func (e *Entry) Key() []byte {
 }
 
 func (e *Entry) Value() []byte {
-	return e.data[entryHeaderSize:][e.header().KeyLen:e.header().ValueLen]
+	return e.data[entryHeaderSize:][e.header().KeyLen : e.header().KeyLen+e.header().ValueLen]
 }
 
 func (e *Entry) Cap() int {
@@ -31,6 +38,9 @@ func (e *Entry) Cap() int {
 }
 
 func (e *Entry) Set(key, value []byte) error {
+	if len(key)+len(value)+int(entryHeaderSize) > e.Cap() {
+		return sizeLargeError
+	}
 	e.header().KeyLen = uint16(len(key))
 	e.header().ValueLen = uint16(len(value))
 	copy(e.data[entryHeaderSize:], key)

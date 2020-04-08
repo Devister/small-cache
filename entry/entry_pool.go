@@ -52,7 +52,7 @@ func NewPool() *Pool {
 func (p *Pool) GetEntry(key, value []byte) (*Entry, error) {
 	keyLen := uint16(len(key))
 	valueLen := uint16(len(value))
-	size := keyLen + valueLen + entryHeaderSize
+	size := keyLen + valueLen + uint16(entryHeaderSize)
 	if size > maxSize {
 		return nil, SizeLargeError
 	}
@@ -63,12 +63,9 @@ func (p *Pool) GetEntry(key, value []byte) (*Entry, error) {
 		return e, nil
 	}
 	capacity := sizeLevel2Size(sizeLevel)
-	e = &Entry{
+	return &Entry{
 		data: make([]byte, capacity, capacity),
-	}
-	e.header().KeyLen = keyLen
-	e.header().ValueLen = valueLen
-	return e, nil
+	}, nil
 }
 
 func (p *Pool) RecycleEntry(e *Entry) {

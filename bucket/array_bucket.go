@@ -67,6 +67,10 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) error {
 			fmt.Println("[warn] bucket set failed, can not get entry, error: ", err.Error())
 			return err
 		}
+		if err := e.Set(key, value); err != nil {
+			log.Fatal("unexpected, entry set key and value failed: ", err.Error())
+			return err
+		}
 		ptr := uintptr(unsafe.Pointer(e))
 		b.entryPtrs = append(b.entryPtrs, uint64(ptr), hkey)
 		if len(b.entryPtrs) >= b.entryCap {
