@@ -44,7 +44,7 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) error {
 	e, idx := b.getEntry(hkey, key)
 	if e != nil {
 		// entry exist
-		if e.Cap() >= len(key)+len(value) {
+		if e.Cap() >= entry.EntryLen(key, value) {
 			// capacity is big enough
 			if err := e.Set(key, value); err != nil {
 				log.Fatal("unexpected, entry set key and value failed: ", err.Error())
@@ -53,22 +53,16 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) error {
 		} else {
 			// capacity is not enough, new entry and replace the old one
 			b.pool.RecycleEntry(e)
-			e, err = b.pool.GetEntry(key, value)
+			e, err := b.poolGetEntryAndSet(key, value)
 			if err != nil {
-				fmt.Println("[warn] bucket set failed, can not get entry, error: ", err.Error())
 				return err
 			}
 			b.entryPtrs[idx] = uint64(uintptr(unsafe.Pointer(e)))
 		}
 	} else {
 		// entry does not exist, new entry and append to entryPtrs
-		e, err = b.pool.GetEntry(key, value)
+		e, err = b.poolGetEntryAndSet(key, value)
 		if err != nil {
-			fmt.Println("[warn] bucket set failed, can not get entry, error: ", err.Error())
-			return err
-		}
-		if err := e.Set(key, value); err != nil {
-			log.Fatal("unexpected, entry set key and value failed: ", err.Error())
 			return err
 		}
 		ptr := uintptr(unsafe.Pointer(e))
@@ -123,4 +117,17 @@ func (b *ArrayBucket) getEntry(hkey uint64, key []byte) (*entry.Entry, int) {
 		}
 	}
 	return nil, -1
+}
+
+func (b *ArrayBucket) poolGetEntryAndSet(key, value []byte) (*entry.Entry, error) {
+	e, err := b.pool.GetEntry(key, value)
+	if err != nil {
+		fmt.Println("[warn] bucket set failed, can not get entry, error: ", err.Error())
+		return nil, err
+	}
+	if err := e.Set(key, value); err != nil {
+		log.Fatal("unexpected, entry set key and value failed: ", err.Error())
+		return nil, err
+	}
+	return e, nil
 }

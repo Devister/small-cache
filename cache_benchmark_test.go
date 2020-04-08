@@ -19,16 +19,22 @@ func writeOnCache(b *testing.B) {
 	cache := NewCache(cfg)
 	rand.Seed(time.Now().Unix())
 
-	b.RunParallel(func(pb *testing.PB) {
-		id := rand.Int()
-		counter := 0
-
-		b.ReportAllocs()
-		for pb.Next() {
-			cache.Set([]byte(fmt.Sprintf("key-%d-%d", id, counter)), message)
-			counter = counter + 1
-		}
-	})
+	//b.RunParallel(func(pb *testing.PB) {
+	//	id := rand.Int()
+	//	counter := 0
+	//
+	//	b.ReportAllocs()
+	//	for pb.Next() {
+	//		cache.Set([]byte(fmt.Sprintf("key-%d-%d", id, counter)), message)
+	//		counter = counter + 1
+	//	}
+	//})
+	counter := 0
+	for {
+		id := rand.Int() % 10
+		cache.Set([]byte(fmt.Sprintf("key-%d-%d", id, counter)), message)
+		counter = rand.Int() % 1000
+	}
 }
 
 func blob(char byte, len int) []byte {

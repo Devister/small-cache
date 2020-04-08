@@ -6,8 +6,9 @@ import (
 )
 
 const (
-	maxSize      = 65535
-	maxSizeLevel = 89 // maxSizeLevel = calcuSizeLevel(maxSize) + 1
+	maxSize        = 65535
+	maxSizeLevel   = 89 // maxSizeLevel = calcuSizeLevel(maxSize) + 1
+	entryCacheSize = 5
 )
 
 var (
@@ -44,19 +45,21 @@ type Pool struct {
 }
 
 func NewPool() *Pool {
-	return &Pool{
+	p := &Pool{
 		entryCaches: make([]entryCache, maxSizeLevel),
 	}
+	for i := range p.entryCaches {
+		p.entryCaches[i].entries = make([]*Entry, 0, entryCacheSize)
+	}
+	return p
 }
 
 func (p *Pool) GetEntry(key, value []byte) (*Entry, error) {
-	keyLen := uint16(len(key))
-	valueLen := uint16(len(value))
-	size := keyLen + valueLen + uint16(entryHeaderSize)
+	size := EntryLen(key, value)
 	if size > maxSize {
 		return nil, SizeLargeError
 	}
-	sizeLevel := calcuSizeLevel(size)
+	sizeLevel := calcuSizeLevel(uint16(size))
 
 	e := p.entryCaches[sizeLevel].Get()
 	if e != nil {
@@ -69,8 +72,7 @@ func (p *Pool) GetEntry(key, value []byte) (*Entry, error) {
 }
 
 func (p *Pool) RecycleEntry(e *Entry) {
-	size := e.Cap()
-	sizeLevel := (size-1)/8 + 1
+	sizeLevel := calcuSizeLevel(uint16(e.Cap()))
 	p.entryCaches[sizeLevel].Put(e)
 }
 
@@ -98,8 +100,11 @@ func sizeLevel2Size(lvl uint16) uint16 {
 	if lvl <= 16 {
 		return lvl * 8
 	}
+	if lvl == 88 {
+		return 65535
+	}
 	n := lvl / 8
-	m := uint16(8 * (1<<n - 1))
+	m := uint16(8 * (1 << (n - 1)))
 	size := m * (8 + lvl - (n * 8))
 	return size
 }

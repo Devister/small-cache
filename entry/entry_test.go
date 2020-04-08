@@ -6,9 +6,9 @@ import (
 )
 
 func TestEntrySet(t *testing.T) {
-	cap := 16
-	e := Entry{data: make([]byte, cap)}
-	if e.Cap() != cap {
+	capacity := 16
+	e := Entry{data: make([]byte, capacity)}
+	if e.Cap() != capacity {
 		t.Fatal("capacity not expect")
 	}
 	key := []byte("key1")
