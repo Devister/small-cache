@@ -2,6 +2,7 @@ package bucket
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/Devister/small-cache/entry"
 	"log"
 	"sync"
@@ -18,6 +19,12 @@ type ArrayBucket struct {
 }
 
 func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) {
+	var err error
+
+	b.Lock()
+	defer b.Unlock()
+
+	// get entry and idx
 	e, idx := b.getEntry(hkey, key)
 	if e != nil {
 		// entry exist
@@ -28,17 +35,22 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) {
 			}
 		} else {
 			// capacity is not enough, new entry and replace the old one
-			e = b.pool.GetEntry(key, value)
-			b.Lock()
-			defer b.Unlock()
+			b.pool.RecycleEntry(e)
+			e, err = b.pool.GetEntry(key, value)
+			if err != nil {
+				fmt.Println("[warn] bucket set failed, can not get entry, error: ", err.Error())
+				return
+			}
 			b.entryPtrs[idx] = uint64(uintptr(unsafe.Pointer(e)))
 		}
 	} else {
 		// entry does not exist, new entry and append to entryPtrs
-		e = b.pool.GetEntry(key, value)
+		e, err = b.pool.GetEntry(key, value)
+		if err != nil {
+			fmt.Println("[warn] bucket set failed, can not get entry, error: ", err.Error())
+			return
+		}
 		ptr := uintptr(unsafe.Pointer(e))
-		b.Lock()
-		defer b.Unlock()
 		b.entryPtrs = append(b.entryPtrs, uint64(ptr), hkey)
 		if len(b.entryPtrs) >= b.entryCap {
 			b.overflow = true
@@ -47,6 +59,9 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) {
 }
 
 func (b *ArrayBucket) Get(hkey uint64, key []byte) []byte {
+	b.RLock()
+	defer b.RUnlock()
+
 	e, _ := b.getEntry(hkey, key)
 	if e == nil {
 		return nil
@@ -55,14 +70,15 @@ func (b *ArrayBucket) Get(hkey uint64, key []byte) []byte {
 }
 
 func (b *ArrayBucket) Delete(hkey uint64, key []byte) {
+	b.Lock()
+	defer b.Unlock()
+
 	e, idx := b.getEntry(hkey, key)
 	if e == nil {
 		return
 	}
 
 	b.pool.RecycleEntry(e)
-	b.Lock()
-	defer b.Unlock()
 	if len(b.entryPtrs) == 2 {
 		b.entryPtrs = b.entryPtrs[:0]
 	} else {
@@ -74,8 +90,6 @@ func (b *ArrayBucket) Delete(hkey uint64, key []byte) {
 }
 
 func (b *ArrayBucket) getEntry(hkey uint64, key []byte) (*entry.Entry, int) {
-	b.RLock()
-	defer b.RUnlock()
 	for i := 0; i < len(b.entryPtrs); i += 2 {
 		if b.entryPtrs[i+1] == hkey {
 			ptr := uintptr(b.entryPtrs[i])
