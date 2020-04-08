@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	maxSize = 65535
+	maxSize      = 65535
+	maxSizeLevel = 89 // maxSizeLevel = calcuSizeLevel(maxSize) + 1
 )
 
 var (
@@ -40,6 +41,12 @@ func (c *entryCache) Put(e *Entry) {
 type Pool struct {
 	sync.Mutex
 	entryCaches []entryCache
+}
+
+func NewPool() *Pool {
+	return &Pool{
+		entryCaches: make([]entryCache, maxSizeLevel),
+	}
 }
 
 func (p *Pool) GetEntry(key, value []byte) (*Entry, error) {

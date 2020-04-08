@@ -46,3 +46,7 @@ func TestByte2Struct(t *testing.T) {
 	var sa = *(**SA)(unsafe.Pointer(&data))
 	fmt.Println(sa.f1, sa.f2, sa.f3, sa.f4)
 }
+
+func TestMaxSizeLevel(t *testing.T) {
+	fmt.Println(calcuSizeLevel(65535))
+}

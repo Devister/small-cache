@@ -2,6 +2,7 @@ package bucket
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/Devister/small-cache/entry"
 	"log"
@@ -9,16 +10,31 @@ import (
 	"unsafe"
 )
 
+var (
+	NilErr = errors.New("no such key")
+)
+
+const (
+	defaultEntryCap = 256
+)
+
 type ArrayBucket struct {
 	sync.RWMutex
-	entrySize int
 	entryCap  int
 	entryPtrs []uint64
 	pool      *entry.Pool
 	overflow  bool
 }
 
-func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) {
+func NewArrayBucket() *ArrayBucket {
+	return &ArrayBucket{
+		entryCap:  defaultEntryCap,
+		entryPtrs: make([]uint64, 0, defaultEntryCap),
+		pool:      entry.NewPool(),
+	}
+}
+
+func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) error {
 	var err error
 
 	b.Lock()
@@ -32,6 +48,7 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) {
 			// capacity is big enough
 			if err := e.Set(key, value); err != nil {
 				log.Fatal("unexpected, entry set key and value failed: ", err.Error())
+				return err
 			}
 		} else {
 			// capacity is not enough, new entry and replace the old one
@@ -39,7 +56,7 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) {
 			e, err = b.pool.GetEntry(key, value)
 			if err != nil {
 				fmt.Println("[warn] bucket set failed, can not get entry, error: ", err.Error())
-				return
+				return err
 			}
 			b.entryPtrs[idx] = uint64(uintptr(unsafe.Pointer(e)))
 		}
@@ -48,7 +65,7 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) {
 		e, err = b.pool.GetEntry(key, value)
 		if err != nil {
 			fmt.Println("[warn] bucket set failed, can not get entry, error: ", err.Error())
-			return
+			return err
 		}
 		ptr := uintptr(unsafe.Pointer(e))
 		b.entryPtrs = append(b.entryPtrs, uint64(ptr), hkey)
@@ -56,26 +73,27 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) {
 			b.overflow = true
 		}
 	}
+	return nil
 }
 
-func (b *ArrayBucket) Get(hkey uint64, key []byte) []byte {
+func (b *ArrayBucket) Get(hkey uint64, key []byte) ([]byte, error) {
 	b.RLock()
 	defer b.RUnlock()
 
 	e, _ := b.getEntry(hkey, key)
 	if e == nil {
-		return nil
+		return nil, NilErr
 	}
-	return e.Value()
+	return e.Value(), nil
 }
 
-func (b *ArrayBucket) Delete(hkey uint64, key []byte) {
+func (b *ArrayBucket) Delete(hkey uint64, key []byte) error {
 	b.Lock()
 	defer b.Unlock()
 
 	e, idx := b.getEntry(hkey, key)
 	if e == nil {
-		return
+		return NilErr
 	}
 
 	b.pool.RecycleEntry(e)
@@ -87,6 +105,7 @@ func (b *ArrayBucket) Delete(hkey uint64, key []byte) {
 		b.entryPtrs[idx+1] = b.entryPtrs[lastIdx+1]
 		b.entryPtrs = b.entryPtrs[:lastIdx]
 	}
+	return nil
 }
 
 func (b *ArrayBucket) getEntry(hkey uint64, key []byte) (*entry.Entry, int) {
