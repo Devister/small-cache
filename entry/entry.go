@@ -8,6 +8,7 @@ import (
 
 const (
 	entryHeaderSize = unsafe.Sizeof(EntryHeader{})
+	//entryHeaderSize = 4
 )
 
 var (
@@ -36,7 +37,7 @@ func (e *Entry) Key() []byte {
 		return nil
 	} else {
 		if h.KeyLen+uint16(entryHeaderSize) > uint16(e.Cap()) {
-			fmt.Println("key length over entry capacity")
+			fmt.Println("key length: ", h.KeyLen, " over entry capacity: ", e.Cap())
 			return nil
 		}
 	}

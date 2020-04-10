@@ -7,7 +7,6 @@ import (
 	"github.com/Devister/small-cache/entry"
 	"log"
 	"sync"
-	"unsafe"
 )
 
 var (
@@ -15,35 +14,35 @@ var (
 )
 
 const (
-	defaultEntryCap = 256
+	defaultEntryCap = 512
 )
 
 type ArrayBucket struct {
 	sync.RWMutex
 	entryCap  int
-	entryPtrs []uint64
+	entryPtrs []*entry.Entry
+	hashKeys  []uint64
 	pool      *entry.Pool
 	overflow  bool
 }
 
-func NewArrayBucket() *ArrayBucket {
+func NewArrayBucket(pool *entry.Pool) *ArrayBucket {
 	return &ArrayBucket{
 		entryCap:  defaultEntryCap,
-		entryPtrs: make([]uint64, 0, defaultEntryCap),
-		pool:      entry.NewPool(),
+		entryPtrs: make([]*entry.Entry, 0, defaultEntryCap),
+		hashKeys:  make([]uint64, 0, defaultEntryCap),
+		pool:      pool,
 	}
 }
 
 func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) error {
-	var err error
-
 	b.Lock()
 	defer b.Unlock()
 
 	// get entry and idx
-	e, idx := b.getEntry(hkey, key)
-	if e != nil {
+	if entryIdx := b.getEntryIdx(hkey, key); entryIdx >= 0 {
 		// entry exist
+		e := b.entryPtrs[entryIdx]
 		if e.Cap() >= entry.EntryLen(key, value) {
 			// capacity is big enough
 			if err := e.Set(key, value); err != nil {
@@ -57,18 +56,19 @@ func (b *ArrayBucket) Set(hkey uint64, key []byte, value []byte) error {
 			if err != nil {
 				return err
 			}
-			b.entryPtrs[idx] = uint64(uintptr(unsafe.Pointer(e)))
+			b.entryPtrs[entryIdx] = e
 		}
 	} else {
 		// entry does not exist, new entry and append to entryPtrs
-		e, err = b.poolGetEntryAndSet(key, value)
+		e, err := b.poolGetEntryAndSet(key, value)
 		if err != nil {
 			return err
 		}
-		ptr := uintptr(unsafe.Pointer(e))
-		b.entryPtrs = append(b.entryPtrs, uint64(ptr), hkey)
+		b.entryPtrs = append(b.entryPtrs, e)
+		b.hashKeys = append(b.hashKeys, hkey)
 		if len(b.entryPtrs) >= b.entryCap {
 			b.overflow = true
+			fmt.Println("[debug] bucket overflow, len: ", len(b.entryPtrs))
 		}
 	}
 	return nil
@@ -78,45 +78,43 @@ func (b *ArrayBucket) Get(hkey uint64, key []byte) ([]byte, error) {
 	b.RLock()
 	defer b.RUnlock()
 
-	e, _ := b.getEntry(hkey, key)
-	if e == nil {
+	if idx := b.getEntryIdx(hkey, key); idx == -1 {
 		return nil, NilErr
+	} else {
+		return b.entryPtrs[idx].Value(), nil
 	}
-	return e.Value(), nil
 }
 
 func (b *ArrayBucket) Delete(hkey uint64, key []byte) error {
 	b.Lock()
 	defer b.Unlock()
 
-	e, idx := b.getEntry(hkey, key)
-	if e == nil {
+	idx := b.getEntryIdx(hkey, key)
+	if idx == -1 {
 		return NilErr
 	}
 
-	b.pool.RecycleEntry(e)
+	b.pool.RecycleEntry(b.entryPtrs[idx])
 	if len(b.entryPtrs) == 2 {
 		b.entryPtrs = b.entryPtrs[:0]
+		b.hashKeys = b.hashKeys[:0]
 	} else {
-		lastIdx := len(b.entryPtrs) - 2
+		lastIdx := len(b.entryPtrs) - 1
 		b.entryPtrs[idx] = b.entryPtrs[lastIdx]
-		b.entryPtrs[idx+1] = b.entryPtrs[lastIdx+1]
 		b.entryPtrs = b.entryPtrs[:lastIdx]
+		b.hashKeys[idx] = b.hashKeys[lastIdx]
+		b.hashKeys = b.hashKeys[:lastIdx]
 	}
 	return nil
 }
 
-func (b *ArrayBucket) getEntry(hkey uint64, key []byte) (*entry.Entry, int) {
-	for i := 0; i < len(b.entryPtrs); i += 2 {
-		if b.entryPtrs[i+1] == hkey {
-			ptr := uintptr(b.entryPtrs[i])
-			e := (*entry.Entry)(unsafe.Pointer(ptr))
-			if bytes.Equal(e.Key(), key) {
-				return e, i
-			}
+func (b *ArrayBucket) getEntryIdx(hkey uint64, key []byte) int {
+	for i, hk := range b.hashKeys {
+		if hk == hkey && bytes.Equal(b.entryPtrs[i].Key(), key) {
+			return i
 		}
 	}
-	return nil, -1
+	return -1
 }
 
 func (b *ArrayBucket) poolGetEntryAndSet(key, value []byte) (*entry.Entry, error) {

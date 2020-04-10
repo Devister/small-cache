@@ -2,10 +2,13 @@ package small_cache
 
 import (
 	"bytes"
+	"fmt"
+	"github.com/Devister/small-cache/entry"
 	"testing"
 )
 
 func TestCacheSetAndGet(t *testing.T) {
+	fmt.Println("[debug] ", entry.EntryLen(nil, nil))
 	c := NewCache(&CacheConfig{})
 	key := []byte("key1")
 	value1 := []byte("value1")
